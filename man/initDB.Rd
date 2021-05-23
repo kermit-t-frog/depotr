@@ -4,16 +4,18 @@
 \alias{initDB}
 \title{Initialize the MariaDB backend database}
 \usage{
-initDB(host, port, user, pass, ...)
+initDB(host, port, user, pass, dbname, ...)
 }
 \arguments{
-\item{host}{Host address, e.g. 'localhost' or IP address}
+\item{host}{Host address, e.g. 'localhost' or 'IP address'}
 
 \item{port}{Backend port, e.g. 3306}
 
 \item{user}{User name}
 
 \item{pass}{Password}
+
+\item{dbname}{Database name}
 
 \item{...}{Other parameters to be passed to the backend connection}
 }

@@ -1,9 +1,10 @@
 #' Initialize the MariaDB backend database
 #'
-#' @param host Host address, e.g. 'localhost' or IP address
+#' @param host Host address, e.g. 'localhost' or 'IP address'
 #' @param port Backend port, e.g. 3306
 #' @param user User name
 #' @param pass Password
+#' @param dbname Database name
 #' @param ... Other parameters to be passed to the backend connection
 #'
 #' @return Null
@@ -14,7 +15,7 @@
 #' \dontrun{
 #' initDB('localhost',3306,'adam','the password')
 #' }
-initDB <- function(host,port,user,pass,...){
+initDB <- function(host,port,user,pass,dbname,...){
   if (missing(host) || missing(port) || missing(user) || missing(pass)){
     stop("Database connection not properly defined. Need host,port,user,pass.")
   }
@@ -23,7 +24,8 @@ initDB <- function(host,port,user,pass,...){
   parms$port <- port
   parms$user <- user
   parms$pass <- pass
-  parms$drv <- RMariaDB::MariaDB()
+  parms$dbname <- dbname
+    parms$drv <- RMariaDB::MariaDB()
   options(depotr_db = parms)
 }
 
@@ -341,26 +343,32 @@ price_insert_batch <- function(){
                "FIELDS TERMINATED BY ','",
                "IGNORE 1 LINES;")
   sql %<>% sprintf(normalizePath(outfile,winslash = "/"))
-  exec_wrapper(sql)
+  tryCatch({
+    exec_wrapper(sql)
+    unlink(outfile)
+    },
+    error = function(cond){
+      unlink(outfile)
+    if (grepl("denied to user",cond)){stop(cond)} else {stop(cond)} })
   exec_wrapper("CALL load_price_from_etl();")
   get_wrapper("SHOW ERRORS LIMIT 1;")
 
-  actions <- result %>%
-    iexcloudr::extract_corporate_actions() %>%
-    dplyr::mutate(vendor="IEX") %>%
-    dplyr::select(vendor,symbol,date,close,dividend,split_factor)
-  if (nrow(actions)>0){
-    message("found corporate actions")
-    actions %>% readr::write_csv(outfile,col_names = TRUE,append = FALSE)
-    sql <- paste("LOAD DATA LOCAL INFILE '%s' INTO TABLE etl_price_adjustment",
-                 "CHARACTER SET 'utf8'",
-                 "FIELDS TERMINATED BY ','",
-                 "IGNORE 1 LINES;")
-    sql %<>% sprintf(normalizePath(outfile,winslash = "/"))
-    exec_wrapper(sql)
-    exec_wrapper("CALL load_price_adjustment_from_etl();")
-  }
-  unlink(outfile)
+  # actions <- result %>%
+  #   iexcloudr::extract_corporate_actions() %>%
+  #   dplyr::mutate(vendor="IEX") %>%
+  #   dplyr::select(vendor,symbol,date,close,dividend,split_factor)
+  # if (nrow(actions)>0){
+  #   message("found corporate actions")
+  #   actions %>% readr::write_csv(outfile,col_names = TRUE,append = FALSE)
+  #   sql <- paste("LOAD DATA LOCAL INFILE '%s' INTO TABLE etl_price_adjustment",
+  #                "CHARACTER SET 'utf8'",
+  #                "FIELDS TERMINATED BY ','",
+  #                "IGNORE 1 LINES;")
+  #   sql %<>% sprintf(normalizePath(outfile,winslash = "/"))
+  #   exec_wrapper(sql)
+  #   exec_wrapper("CALL load_price_adjustment_from_etl();")
+  # }
+
   message("Batch download complete.")
 }
 

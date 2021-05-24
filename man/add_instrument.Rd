@@ -4,7 +4,7 @@
 \alias{add_instrument}
 \title{Introduce a new security}
 \usage{
-add_instrument(isin, name, ccy)
+add_instrument(isin, name, ccy, vendor, mic, symbol, symccy)
 }
 \arguments{
 \item{isin}{International Securities Idenficiation Number of the new object,
@@ -13,6 +13,14 @@ e.g. 'DE1234567890'}
 \item{name}{A name, e.g. 'Acme Inc Pref. Shares'}
 
 \item{ccy}{The company's / fund's reporting currency, e.g. 'EUR'}
+
+\item{vendor}{Optional vendor name if a symbol is to be set}
+
+\item{symbol}{Optional vendor-market symbol if a symbol is to be set}
+
+\item{market}{Optional market identificer code (mic) if a symbol is to be set}
+
+\item{sym_ccy}{Optional symbol ccy if a symbol is to be set (or reuse ccy)}
 }
 \description{
 Introduce a new security

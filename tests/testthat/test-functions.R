@@ -98,10 +98,22 @@ test_that("adding symbols works", {
   testthat::expect_silent(  add_or_update_symbol('IEX','XETR','DE0008404005','EUR','ALV-GY'))
 
   init_read()
-  testthat::expect_error(price_insert_batch(),'denied to user')
+  prices <- readr::read_csv("prices.csv") %>% dplyr::mutate(vendor="IEX",.before = symbol)
+  testthat::expect_error(store_prices(prices),'denied to user')
 
   init_admin()
-  testthat::expect_message(price_insert_batch(),'Batch download complete')
-  testthat::expect_message(price_insert_batch(),'No new market data available')
+  testthat::expect_message(store_prices(prices),'rows completed.')
+
 })
 
+test_that("can extract dividend / split info", {
+  prices <- tibble::tibble(
+    symbol = c("ALV-GY","ALV-GY","ALV-GY"),
+    date = c("2021-05-04","2021-05-05","2021-05-06"),
+    close = c(216.5000, 221.5000, 212.7000),
+    aClose = c(216.5000, 221.5000, 212.7000),
+    fClose = c(207.1167, 211.9000, 212.7000))
+  x <- extract_corporate_actions(prices)
+  expect_equal(x$dividend , 9.6)
+  expect_equal (x$date , "2021-05-05")
+})

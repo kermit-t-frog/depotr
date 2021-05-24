@@ -267,6 +267,10 @@ add_or_update_symbol <- function(vendor,mic,isin,ccy,symbol){
 #' e.g. 'DE1234567890'
 #' @param name A name, e.g. 'Acme Inc Pref. Shares'
 #' @param ccy  The company's / fund's reporting currency, e.g. 'EUR'
+#' @param vendor Optional vendor name if a symbol is to be set
+#' @param market Optional market identificer code (mic) if a symbol is to be set
+#' @param symbol Optional vendor-market symbol if a symbol is to be set
+#' @param sym_ccy Optional symbol ccy if a symbol is to be set (or reuse ccy)
 #'
 #' @return NULL
 #' @export
@@ -276,9 +280,15 @@ add_or_update_symbol <- function(vendor,mic,isin,ccy,symbol){
 #' \dontrun{
 #' add_instrument('DE1234567890','Acme Inc','EUR')
 #' }
-add_instrument <- function(isin,name,ccy){
+add_instrument <- function(isin,name,ccy,vendor,mic,symbol,symccy){
+
   sprintf("CALL add_instrument('%s','%s','%s');",
           isin,name,ccy) %>% exec_wrapper()
+
+  if (all(!missing(vendor), !missing(mic), !missing(symbol))){
+    if (missing(symccy)){symccy <- ccy}
+    add_or_update_symbol(vendor,mic,isin,symccy,symbol)
+  }
 }
 
 #' Grant, or revoke, read/write permissions to your portfolios
@@ -303,23 +313,21 @@ grant_depot_permission <- function(to_user,broker,external_id,
     exec_wrapper(authenticate=TRUE)
 }
 
-
-#' Batch insert latest market data into the backend
+#' Download latest symbol data from IEX cloud
 #'
-#' @return NULL
+#' @return A tibble with `vendor`, `symbol`, `date`, `OHLC`, and volume
 #' @export
+#' @importFrom dplyr mutate
+#' @importFrom iexcloudr prices
+#' @importFrom magrittr %>%
 #' @importFrom purrr map_dfr
 #' @importFrom stringr str_pad
-#' @importFrom iexcloudr prices extract_corporate_actions
-#' @importFrom dplyr mutate
-#' @importFrom readr write_csv
+#'
 #' @examples
 #' \dontrun{
-#' iexcloudr::apikey("my_api_key")
-#' depotr::initDB('localhost',3399,'user','pass')
-#' price_insert_batch()
+#' latest_prices()
 #' }
-price_insert_batch <- function(){
+latest_prices <- function(){
   current <- get_wrapper("SELECT * FROM v_last_symbol_data;")
   nr <- nrow(current)
   result <- purrr::map_dfr(1:nrow(current),function(i){
@@ -330,14 +338,28 @@ price_insert_batch <- function(){
             " : ",nrow(x))
     x
   }) %>% dplyr::mutate(vendor="IEX",.before=symbol)
-  if (nrow(result)==0){
+}
+
+#' Load new market data to database, based on a data tibble.
+#'
+#' @param prices A tibble with `vendor`, `symbol`, `date`, `OHLC`, and volume
+#'
+#' @return NULL
+#' @export
+#' @importFrom dplyr  select
+#' @importFrom readr write_csv
+#' @importFrom magrittr %>%
+#'
+#' @examples
+store_prices <- function(prices){
+  if (nrow(prices)==0){
     message("Batch download : No new market data available. Exiting.")
     return(invisible())
   }
   outfile <- tempfile(fileext = ".csv")
-  result %>%
+  prices %>%
     dplyr::select(dplyr::all_of(c("vendor","symbol","date","open","high","low","close","volume"))) %>%
-  readr::write_csv(outfile,col_names = TRUE,append = FALSE)
+    readr::write_csv(outfile,col_names = TRUE,append = FALSE)
   sql <- paste("LOAD DATA LOCAL INFILE '%s' INTO TABLE etl_price",
                "CHARACTER SET 'utf8'",
                "FIELDS TERMINATED BY ','",
@@ -346,30 +368,55 @@ price_insert_batch <- function(){
   tryCatch({
     exec_wrapper(sql)
     unlink(outfile)
+    exec_wrapper("CALL load_price_from_etl();")
+    message(sprintf("batch insert of %d new price rows completed.",nrow(prices)))
     },
-    error = function(cond){
-      unlink(outfile)
-    if (grepl("denied to user",cond)){stop(cond)} else {stop(cond)} })
-  exec_wrapper("CALL load_price_from_etl();")
-  get_wrapper("SHOW ERRORS LIMIT 1;")
+  error = function(cond){
+    unlink(outfile)
+    stop(cond)
+   if (grepl("denied to user",cond)){stop(  get_wrapper("SHOW ERRORS LIMIT 1;")$Message)} else {stop(cond)} })
+}
 
-  # actions <- result %>%
-  #   iexcloudr::extract_corporate_actions() %>%
-  #   dplyr::mutate(vendor="IEX") %>%
-  #   dplyr::select(vendor,symbol,date,close,dividend,split_factor)
-  # if (nrow(actions)>0){
-  #   message("found corporate actions")
-  #   actions %>% readr::write_csv(outfile,col_names = TRUE,append = FALSE)
-  #   sql <- paste("LOAD DATA LOCAL INFILE '%s' INTO TABLE etl_price_adjustment",
-  #                "CHARACTER SET 'utf8'",
-  #                "FIELDS TERMINATED BY ','",
-  #                "IGNORE 1 LINES;")
-  #   sql %<>% sprintf(normalizePath(outfile,winslash = "/"))
-  #   exec_wrapper(sql)
-  #   exec_wrapper("CALL load_price_adjustment_from_etl();")
-  # }
 
-  message("Batch download complete.")
+
+
+#' Store price adjustments from corporate actions
+#'
+#' @param actions A tibble with `vendor`, `symbol`, `date`,`close`, `dividend` and `split_factor`.
+#'
+#' @return NULL
+#' @export
+#' @importFrom dplyr select
+#' @importFrom readr write_csv
+#'
+#' @examples
+#' \dontrun{
+#' iexcloudr::prices("ALV-GY") %>%
+#' iexcloudr:extract_corporate_actions() %>%
+#' store_corporate_actions()}
+store_corporate_actions <- function(actions){
+   if (nrow(actions)>0){
+     message("Adding corporate actions")
+     outfile <- tempfile(fileext = ".csv")
+     actions %>%
+       dplyr::select(.data$vendor,.data$symbol,valuedate = .data$date,.data$close,.data$dividend,.data$split_factor) %>%
+       readr::write_csv(outfile,col_names = TRUE,append = FALSE,na = "NULL",quote_escape = "none")
+     sql <- paste("LOAD DATA LOCAL INFILE '%s' INTO TABLE etl_price_adjustment",
+                  "CHARACTER SET 'utf8'",
+                  "FIELDS TERMINATED BY ','",
+                  "IGNORE 1 LINES;")
+     sql %<>% sprintf(normalizePath(outfile,winslash = "/"))
+     tryCatch({
+       exec_wrapper(sql)
+       unlink(outfile)
+       exec_wrapper("CALL load_price_adjustment_from_etl();")
+       message("price adjustments have been updated.")
+       },
+       error = function(cond){
+       unlink(outfile)
+       stop(cond)
+     })
+   }
 }
 
 #' Get position table for active user
@@ -404,3 +451,43 @@ trades <- function(){
     get_wrapper(authenticate=TRUE)
 }
 
+
+#' Extract corporate actions from (un-)adjusted closing prices
+#'
+#' @param prices A tibble with `symbol`, `date`, unadjusted close `uClose`,
+#' split adjusted close `close` and fully-adjusted `fClose`.
+#'
+#' @return A tibble with `symbol`, `date`,`close`, `split_factor` and `dividend`
+#' @export
+#' @importFrom magrittr %>% %<>%
+#' @importFrom dplyr arrange desc mutate group_by group_modify
+#' @importFrom purrr map_dfr
+#' @importFrom tibble tibble
+#'
+#' @examples
+#' prices <- tibble::tibble(
+#'     symbol = c("ALV-GY","ALV-GY","ALV-GY"),
+#'       date = c("2021-05-04","2021-05-05","2021-05-06"),
+#'      close = c(216.5000, 221.5000, 212.7000),
+#'     aClose = c(216.5000, 221.5000, 212.7000),
+#'     fClose = c(207.1167, 211.9000, 212.7000))
+#' extract_corporate_actions(prices)
+extract_corporate_actions <- function(prices){
+  prices %<>% dplyr::arrange(symbol,dplyr::desc(date))
+  prices %>% dplyr::group_by(symbol) %>% dplyr::group_modify(function(symbolprices,y){
+    purrr::map_dfr(1:nrow(symbolprices),function(i){
+      item <- symbolprices[i,]
+      date <- item$date
+      dividend <- round(item$aClose-item$fClose,2)
+      div_factor <- (1-dividend/item$aClose)
+      split_factor <- item$aClose/item$close
+      if ( (abs(dividend)>1e-3) || (abs(log(split_factor))>1e-4 )){
+        symbolprices <<- symbolprices %>% dplyr::mutate(aClose = .data$aClose / split_factor,
+                                                        fClose = .data$fClose / split_factor / div_factor)
+        tibble::tibble(date = item$date,close=item$close, split_factor = split_factor, dividend = dividend)
+      }
+    }) %>% dplyr::arrange(.data$date)
+
+  }) %>% dplyr::ungroup()
+
+}

@@ -159,6 +159,7 @@ exec_wrapper <- function(sql_statement,authenticate=FALSE){
                    authenticate()$password)
     RMariaDB::dbExecute(con$connection(),sql)
   }
+
   RMariaDB::dbExecute(con$connection(),sql_statement)
   msg <- RMariaDB::dbGetQuery(con$connection(),"SHOW ERRORS LIMIT 1;")
   if (length(msg$Message)!=0){
@@ -376,7 +377,6 @@ store_prices <- function(prices){
     stop(cond)
    if (grepl("denied to user",cond)){stop(  get_wrapper("SHOW ERRORS LIMIT 1;")$Message)} else {stop(cond)} })
 }
-
 
 
 

@@ -1,3 +1,4 @@
+suppressWarnings(library(magrittr))
 # helper functions for setting the read and admin users for db connection
 init_read <- function(){
   initDB(host = 'localhost',
@@ -117,3 +118,23 @@ test_that("can extract dividend / split info", {
   expect_equal(x$dividend , 9.6)
   expect_equal (x$date , "2021-05-05")
 })
+
+test_that("can upload dividends", {
+  prices <- readr::read_csv("prices.csv")
+  actions <- prices %>%
+  extract_corporate_actions() %>%
+    dplyr::mutate(vendor="IEX",.before = .data$symbol)
+  init_read()
+  expect_error(store_corporate_actions(actions),'denied to user')
+  init_admin()
+  expect_message(store_corporate_actions(actions),'have been updated')
+  prices2 <-   depotr:::get_wrapper("SELECT * FROM v_price_adjusted;")
+  expect_equal(
+    prices %>% dplyr::filter(date==as.Date("2021-05-05")) %$% fClose,
+    prices2 %>% dplyr::filter(valuedate==as.Date("2021-05-05")) %$% close
+  )
+
+})
+
+
+

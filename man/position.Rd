@@ -4,7 +4,11 @@
 \alias{position}
 \title{Get position table for active user}
 \usage{
-position()
+position(valuedate)
+}
+\arguments{
+\item{valuedate}{As of which date is the position to be returned?
+Defaults to _today_.}
 }
 \value{
 A tibble with depot properties (owner,broker, external_id, ccy),

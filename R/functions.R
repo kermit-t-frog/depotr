@@ -421,6 +421,8 @@ store_corporate_actions <- function(actions){
 
 #' Get position table for active user
 #'
+#' @param valuedate As of which date is the position to be returned?
+#' Defaults to _today_.
 #' @return A tibble with depot properties (owner,broker, external_id, ccy),
 #' instrument properties (isin,ccy), position properties (date, qty, vol, ccy)
 #' @export
@@ -430,9 +432,19 @@ store_corporate_actions <- function(actions){
 #' authenticate('me','mypass')
 #' position()
 #' }
-position <- function(){
-  "SELECT * FROM v_position;" %>%
-    get_wrapper(authenticate=TRUE)
+position <- function(valuedate){
+  if (missing(valuedate)){valuedate<-Sys.Date()}
+  pos <- "CALL position_as_of('%s');" %>%
+    sprintf(valuedate) %>%
+    get_wrapper(authenticate = TRUE)
+  mkt <- "CALL market_as_of('%s')" %>%
+    sprintf(valuedate) %>%
+    get_wrapper %>% dplyr::select(.data$isin, .data$ccy,mkt_valuedate = .data$valuedate, .data$close)
+  pos %>%
+    dplyr::left_join(mkt,by=c("isin","pos_ccy"="ccy")) %>%
+    dplyr::mutate(pos_valuedate = valuedate,
+      mkt_value = .data$pos_qty * .data$close) %>%
+    dplyr::select(-.data$close)
 }
 
 #' Get list of trades for active user

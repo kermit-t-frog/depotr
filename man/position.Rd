@@ -4,7 +4,7 @@
 \alias{position}
 \title{Get position table for active user}
 \usage{
-position(valuedate)
+position(valuedate = Sys.Date())
 }
 \arguments{
 \item{valuedate}{As of which date is the position to be returned?

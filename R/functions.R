@@ -44,6 +44,7 @@ initDB <- function(host,port,user,pass,dbname,...){
 authenticate <- function(username,password){
   if (!missing(username) && !missing(password)){
       options(depotr_user = list(username=username,password=password))
+    # todo: use openssl::sha512  here.
   }
   invisible(getOption("depotr_user"))
 }
@@ -432,8 +433,8 @@ store_corporate_actions <- function(actions){
 #' authenticate('me','mypass')
 #' position()
 #' }
-position <- function(valuedate){
-  if (missing(valuedate)){valuedate<-Sys.Date()}
+position <- function(valuedate=Sys.Date()){
+  valuedate %<>% as.Date()
   pos <- "CALL position_as_of('%s');" %>%
     sprintf(valuedate) %>%
     get_wrapper(authenticate = TRUE)
@@ -501,5 +502,99 @@ extract_corporate_actions <- function(prices){
     }) %>% dplyr::arrange(.data$date)
 
   }) %>% dplyr::ungroup()
+}
 
+#' Get all portfolio cashflows for a time period
+#'
+#' @param from_date Start date, inclusive. Defaults to first of the year
+#' @param to_date End date, inclusive. Defaults to 'today'.
+#'
+#' @return A tibble with depot and instrument identifiers,
+#' cash flow properties and amounts.
+#' @export
+#'
+#' @examples
+cashflows <- function(from_date='1990-01-01',to_date=Sys.Date()){
+  "CALL cashflow_from_to('%s','%s');" %>%
+    sprintf(from_date,to_date) %>%
+    get_wrapper(authenticate=TRUE)
+}
+
+#' Cash flows to/from your depot(s) on isin/ccy level, assuming
+#' initial position to be an investment at market prices (neg. sign)
+#'
+#' @param from Start date, inclusive.
+#' @param to End date, inclusive.
+#'
+#' @return A tibble with depot and isin identifiers, cash flow size and ccy.
+#' @export
+#'
+#' @examples \dontrun{flow_table('2021-01-01','2021-05-31')}
+flow_table <- function(from,to){
+  from %<>% as.Date()
+  to %<>% as.Date()
+
+  # build the flow tibble from position value at start date, at end date, and
+  # interim cashflows
+  dplyr::bind_rows(
+    # starting point: interpret the position as 'investment', i.e. negative sign
+    position(from) %>%
+      dplyr::mutate(
+        mkt_value = dplyr::if_else(is.na(mkt_value),-1*pos_vol,-1*mkt_value)
+      ),
+    position(to) %>%
+      dplyr::mutate(
+        mkt_value = dplyr::if_else(is.na(mkt_value),pos_vol,mkt_value))
+  ) %>%
+    dplyr::select(
+      owner  = depot_owner,
+      broker = depot_broker,
+      extid  = depot_external_id,
+      date   = pos_valuedate,
+      isin,
+      ccy    = pos_ccy,
+      amount = mkt_value) %>%
+    dplyr::bind_rows(
+      cashflows(as.Date(from) ,as.Date(to)) %>%
+        dplyr::filter(!(flow_type %in% c("buy","sell") && valuedate==from)) %>%
+        dplyr::filter(!(flow_type %in% c("buy","sell") && valuedate==to)) %>%
+        dplyr::group_by(depot_owner, depot_broker,depot_external_id, valuedate, isin,flow_ccy) %>%
+        dplyr::summarise(cf = sum(flow_amount), .groups="drop") %>%
+        dplyr::select(
+          owner = depot_owner,
+          broker= depot_broker,
+          extid = depot_external_id,
+          date  = valuedate,
+          isin,
+          ccy   = flow_ccy,amount=cf)
+    )
+}
+
+#' Internal rate of return based on flow table
+#'
+#' @param flows A tibble from `flow_table`.
+#'
+#' @return
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' flow_table('2021-01-01','2021-05-31')
+#' performance_table(flows)}
+performance_table <- function(flows){
+  xirr <- function(dates,flows){
+    uniroot(function(r){
+      sum( (1+r) ^ (as.numeric( (min(dates) - dates ) / 365 )) * flows)
+    },
+    interval = c(-0.9999,5),
+    tol = 1e-4)$root
+  }
+  # build the flow tibble from position value at start date, at end date, and
+  # interim cashflows
+  flows %>%
+    dplyr::group_by(ccy) %>%
+    dplyr::group_modify(function(x,y){
+      tibble::tibble(performance = xirr(x$date,x$amount))
+    }) %>%
+    dplyr::ungroup()
 }

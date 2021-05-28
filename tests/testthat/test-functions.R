@@ -128,13 +128,18 @@ test_that("can upload dividends", {
   expect_error(store_corporate_actions(actions),'denied to user')
   init_admin()
   expect_message(store_corporate_actions(actions),'have been updated')
-  prices2 <-   depotr:::get_wrapper("SELECT * FROM v_price_adjusted;")
-  expect_equal(
-    prices %>% dplyr::filter(date==as.Date("2021-05-05")) %$% fClose,
-    prices2 %>% dplyr::filter(valuedate==as.Date("2021-05-05")) %$% close
-  )
+  #prices2 <-   depotr:::get_wrapper("SELECT * FROM v_price_adjusted;")
+  #expect_equal(
+  #  prices %>% dplyr::filter(date==as.Date("2021-05-05")) %$% fClose,
+  #  prices2 %>% dplyr::filter(valuedate==as.Date("2021-05-05")) %$% close
+  #)
 
 })
 
 
+test_that("can read the market", {
+  init_read()
+  expect_true(nrow(get_market())>1)
+
+})
 

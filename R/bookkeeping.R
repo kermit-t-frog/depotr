@@ -180,17 +180,18 @@ trades <- function(){
 
 #' Get all portfolio cashflows for a time period
 #'
-#' @param from_date Start date, inclusive. Defaults to first of the year
-#' @param to_date End date, inclusive. Defaults to 'today'.
+#' @param from Start date, inclusive. Defaults to first of the year
+#' @param to End date, inclusive. Defaults to 'today'.
 #'
 #' @return A tibble with depot and instrument identifiers,
 #' cash flow properties and amounts.
 #' @export
 #'
 #' @examples
-cashflows <- function(from_date='1990-01-01',to_date=Sys.Date()){
+#' \dontrun{cashflows()}
+cashflows <- function(from='1990-01-01',to=Sys.Date()){
   "CALL cashflow_from_to('%s','%s');" %>%
-    sprintf(from_date,to_date) %>%
+    sprintf(from,to) %>%
     get_wrapper(authenticate=TRUE)
 }
 
@@ -243,3 +244,5 @@ flow_table <- function(from,to){
           ccy   = flow_ccy,amount=cf)
     )
 }
+
+

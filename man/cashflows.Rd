@@ -4,12 +4,12 @@
 \alias{cashflows}
 \title{Get all portfolio cashflows for a time period}
 \usage{
-cashflows(from_date = "1990-01-01", to_date = Sys.Date())
+cashflows(from = "1990-01-01", to = Sys.Date())
 }
 \arguments{
-\item{from_date}{Start date, inclusive. Defaults to first of the year}
+\item{from}{Start date, inclusive. Defaults to first of the year}
 
-\item{to_date}{End date, inclusive. Defaults to 'today'.}
+\item{to}{End date, inclusive. Defaults to 'today'.}
 }
 \value{
 A tibble with depot and instrument identifiers,
@@ -17,4 +17,7 @@ cash flow properties and amounts.
 }
 \description{
 Get all portfolio cashflows for a time period
+}
+\examples{
+\dontrun{cashflows()}
 }

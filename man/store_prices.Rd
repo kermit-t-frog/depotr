@@ -12,3 +12,7 @@ store_prices(prices)
 \description{
 Load new market data to database, based on a data tibble.
 }
+\examples{
+\dontrun{
+store_prices(pricetbl)}
+}

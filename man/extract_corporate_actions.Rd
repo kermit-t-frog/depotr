@@ -4,11 +4,14 @@
 \alias{extract_corporate_actions}
 \title{Extract corporate actions from (un-)adjusted closing prices}
 \usage{
-extract_corporate_actions(prices)
+extract_corporate_actions(prices, accuracy = 2)
 }
 \arguments{
 \item{prices}{A tibble with `symbol`, `date`, unadjusted close `uClose`,
 split adjusted close `close` and fully-adjusted `fClose`.}
+
+\item{accuracy}{Some instruments pay dividends in smaller currency denominations.
+By default, `accuracy` is set to `2`, e.g. EUR-cents.}
 }
 \value{
 A tibble with `symbol`, `date`,`close`, `split_factor` and `dividend`

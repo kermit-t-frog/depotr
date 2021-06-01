@@ -109,7 +109,8 @@ latest_prices <- function(){
 #' @importFrom readr write_csv
 #' @importFrom magrittr %>%
 #'
-#' @examples
+#' @examples \dontrun{
+#' store_prices(pricetbl)}
 store_prices <- function(prices){
   if (nrow(prices)==0){
     message("Batch download : No new market data available. Exiting.")
@@ -152,7 +153,6 @@ store_prices <- function(prices){
 #' store_corporate_actions()}
 store_corporate_actions <- function(actions){
    if (nrow(actions)>0){
-     message("Adding corporate actions")
      outfile <- tempfile(fileext = ".csv")
      actions %>%
        dplyr::select(.data$vendor,.data$symbol,valuedate = .data$date,.data$close,.data$dividend,.data$split_factor) %>%
@@ -166,7 +166,7 @@ store_corporate_actions <- function(actions){
        exec_wrapper(sql)
        unlink(outfile)
        exec_wrapper("CALL load_price_adjustment_from_etl();")
-       message("price adjustments have been updated.")
+       message(sprintf("Batch insert of %s corporate actions completed.",nrow(actions)))
        },
        error = function(cond){
        unlink(outfile)
@@ -179,6 +179,8 @@ store_corporate_actions <- function(actions){
 #'
 #' @param prices A tibble with `symbol`, `date`, unadjusted close `uClose`,
 #' split adjusted close `close` and fully-adjusted `fClose`.
+#' @param accuracy Some instruments pay dividends in smaller currency denominations.
+#' By default, `accuracy` is set to `2`, e.g. EUR-cents.
 #'
 #' @return A tibble with `symbol`, `date`,`close`, `split_factor` and `dividend`
 #' @export
@@ -195,13 +197,13 @@ store_corporate_actions <- function(actions){
 #'     aClose = c(216.5000, 221.5000, 212.7000),
 #'     fClose = c(207.1167, 211.9000, 212.7000))
 #' extract_corporate_actions(prices)
-extract_corporate_actions <- function(prices){
+extract_corporate_actions <- function(prices,accuracy = 2){
   prices %<>% dplyr::arrange(symbol,dplyr::desc(date))
   prices %>% dplyr::group_by(symbol) %>% dplyr::group_modify(function(symbolprices,y){
     purrr::map_dfr(1:nrow(symbolprices),function(i){
       item <- symbolprices[i,]
       date <- item$date
-      dividend <- round(item$aClose-item$fClose,2)
+      dividend <- round(item$aClose-item$fClose,accuracy)
       div_factor <- (1-dividend/item$aClose)
       split_factor <- item$aClose/item$close
       if ( (abs(dividend)>1e-3) || (abs(log(split_factor))>1e-4 )){

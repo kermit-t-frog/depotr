@@ -204,6 +204,10 @@ extract_corporate_actions <- function(prices,accuracy = 2){
       item <- symbolprices[i,]
       date <- item$date
       dividend <- round(item$aClose-item$fClose,accuracy)
+      if (dividend<0){
+        message("Observed negative dividend on ",date,". Setting dividend to zero.")
+        dividend <- 0
+      }
       div_factor <- (1-dividend/item$aClose)
       split_factor <- item$aClose/item$close
       if ( (abs(dividend)>1e-3) || (abs(log(split_factor))>1e-4 )){

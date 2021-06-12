@@ -199,8 +199,14 @@ store_corporate_actions <- function(actions){
 #' extract_corporate_actions(prices)
 extract_corporate_actions <- function(prices,accuracy = 2){
   prices %<>% dplyr::arrange(symbol,dplyr::desc(date))
+  template <- tibble::tibble(#symbol=as.character(),
+                             date=as.Date(as.character()),
+                             close=as.numeric(),
+                             split_factor=as.numeric(),
+                             dividend=as.numeric())
   prices %>% dplyr::group_by(symbol) %>% dplyr::group_modify(function(symbolprices,y){
-    purrr::map_dfr(1:nrow(symbolprices),function(i){
+
+    out <- purrr::map_dfr(1:nrow(symbolprices),function(i){
       item <- symbolprices[i,]
       date <- item$date
       dividend <- round(item$aClose-item$fClose,accuracy)
@@ -209,14 +215,18 @@ extract_corporate_actions <- function(prices,accuracy = 2){
         dividend <- 0
       }
       div_factor <- (1-dividend/item$aClose)
-      split_factor <- item$aClose/item$close
+      split_factor <- round(item$aClose/item$close,8) #TBD
       if ( (abs(dividend)>1e-3) || (abs(log(split_factor))>1e-4 )){
         symbolprices <<- symbolprices %>% dplyr::mutate(aClose = .data$aClose / split_factor,
                                                         fClose = .data$fClose / split_factor / div_factor)
         tibble::tibble(date = item$date,close=item$close, split_factor = split_factor, dividend = dividend)
       }
-    }) %>% dplyr::arrange(.data$date)
-
+    })
+    if (nrow(out)>0){
+      out %>% dplyr::arrange(.data$date)
+    } else {
+      template
+    }
   }) %>% dplyr::ungroup()
 }
 
